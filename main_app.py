@@ -7,12 +7,10 @@ from bokeh.models import DataTable, TableColumn, HTMLTemplateFormatter, ColumnDa
 from requests.adapters import HTTPAdapter, Retry
 
 
-@st.cache(persist=True, show_spinner=False)
+@st.cache(persist=True, show_spinner=False, allow_output_mutation=True)
 def load_skill_space_model(filename):
     with gzip.open(filename, 'rb') as f:
         mod = pickle.load(f)
-    # time.sleep(15)
-    # mod = 0 
     return mod
 
 def show_table(obj, colnames):
@@ -91,6 +89,64 @@ def recommend_project(apis, languages, langdict, mod):
     
     return similar_tags
 
+def transfer_project(source_lang, dest_lang, apis, mod, langdict, no_api=0):
+    poslist = mod.dv[langdict[dest_lang]] - mod.dv[langdict[source_lang]]
+
+    for api in apis.split(';'):
+        api = api.strip()
+        try:
+            poslist += mod.wv.get_vector(api)
+        except:
+            return (ValueError('API '+api+' Not Found in our data'))
+    
+    # get similar tags 
+    similar_tags = mod.dv.most_similar(positive=[poslist], topn = 1000)
+
+    if no_api > 0:
+        similar_apis = mod.wv.most_similar(positive=[poslist], topn = no_api)
+        return similar_tags, similar_apis
+    else:
+        return similar_tags
+
+def show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct=0):
+    if type(similar_tags) == ValueError:
+        st.write(similar_tags)
+    else:
+    # filter for projects & check if exists
+        with st.spinner('Model Loaded. Getting your Project Recommendations ...'):
+            i = 0
+            colnames = ['Project URL', 'Similarity', 'No. Stars', 'No. Forks', 'Total No. Contributors','Female Developer Percentage' ]
+            rows = []
+            for element,similarity in similar_tags:
+                if i >= no_project: 
+                    break
+                if '_' in element and '<' not in element: 
+                    try:
+                        female_pct = proj_info[element]['female_pct']
+                    except:
+                        continue
+                    if is_diversity:
+                        if female_pct >= gender_pct:
+                            # check if exist
+                            url = check_project_url(element)
+                            if url:
+                                rows.append([url, "{:.2f}".format(similarity),  proj_info[element]['NumStars'], proj_info[element]['NumForks'],
+                                proj_info[element]['NumAuthors'],f'{female_pct:.2f}%' ])
+                                i += 1
+                    else:
+                        # check if exist
+                        url = check_project_url(element)
+                        if url:
+                            rows.append([url, "{:.2f}".format(similarity),  proj_info[element]['NumStars'], proj_info[element]['NumForks'],
+                            proj_info[element]['NumAuthors'],f'{female_pct:.2f}%' ])
+                            i += 1
+            p = show_table(rows, colnames)
+            st.header(f'Project Recommendation Table - Sorted by similarity (scrollable)')
+            with st.expander("DISCLAIMER"):
+                st.write("The results shown here are based on World of Code (WoC) dataset version U. \
+                Any inconsistencies should be reported to WoC maintainers.")
+            st.bokeh_chart(p)
+                    
 
 def show_page():
     ###################################################
@@ -152,6 +208,7 @@ def show_page():
 
     proj_langs = proj_info.pop('langs')
     proj_langs.add('ALL')
+    gender_pct = 0
 
     ###################################################
     # Inputs
@@ -195,15 +252,15 @@ def show_page():
         # Arrange Input Widgets
         col1, col2, col3 = st.columns(3)
         with col1: 
-            lang1_trans = st.selectbox('Select a Programming Language you are familiar with:', langdict.keys(),index=1)
+            source_lang = st.selectbox('Select a Programming Language you are familiar with:', langdict.keys(),index=1)
         
         with col2:
             api1_trans = st.text_input('Enter ALL the Libraries/Packages/APIs you are familiar with in the chosen language (separated by semicolon ";"):')
 
         with col3:
-            lang2_trans = st.selectbox('Select a Programming Language you want to transfer you skills to:', langdict.keys())
+            dest_lang = st.selectbox('Select a Programming Language you want to transfer you skills to:', langdict.keys())
 
-        if lang1_trans == lang2_trans: 
+        if source_lang == dest_lang: 
             st.error('ERROR! The selected languages must be different!')
         else:
             is_api = st.checkbox('Do you want to see API/library/package recommendations for the second language?')
@@ -268,44 +325,7 @@ def show_page():
                 mod = load_skill_space_model('doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz') 
 
             similar_tags = recommend_project(apiselect, langselect, langdict, mod)
-            if type(similar_tags) == ValueError:
-                st.write(similar_tags)
-            else:
-            # filter for projects & check if exists
-                with st.spinner('Model Loaded. Getting your Project Recommendations ...'):
-                    i = 0
-                    colnames = ['Project URL', 'Similarity', 'No. Stars', 'No. Forks', 'Total No. Contributors','Female Developer Percentage' ]
-                    rows = []
-                    for element,similarity in similar_tags:
-                        if i >= no_project: 
-                            break
-                        if '_' in element and '<' not in element: 
-                            try:
-                                female_pct = proj_info[element]['female_pct']
-                            except:
-                                continue
-                            if is_diversity:
-                                if female_pct >= gender_pct:
-                                    # check if exist
-                                    url = check_project_url(element)
-                                    if url:
-                                        rows.append([url, "{:.2f}".format(similarity),  proj_info[element]['NumStars'], proj_info[element]['NumForks'],
-                                        proj_info[element]['NumAuthors'],f'{female_pct:.2f}%' ])
-                                        i += 1
-                            else:
-                                # check if exist
-                                url = check_project_url(element)
-                                if url:
-                                    rows.append([url, "{:.2f}".format(similarity),  proj_info[element]['NumStars'], proj_info[element]['NumForks'],
-                                    proj_info[element]['NumAuthors'],f'{female_pct:.2f}%' ])
-                                    i += 1
-                    p = show_table(rows, colnames)
-                    st.header(f'Project Recommendation Table - Sorted by similarity (scrollable)')
-                    with st.expander("DISCLAIMER"):
-                        st.write("The results shown here are based on World of Code (WoC) dataset version U. \
-                        Any inconsistencies should be reported to WoC maintainers.")
-                    st.bokeh_chart(p)
-                    
+            show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
             
         ###################################################
         # Output for skill transfer based recommendation
@@ -315,7 +335,19 @@ def show_page():
                 mod = load_skill_space_model('doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz')
 
             if is_api:
-                pass # placeholder for API recommendation
+                similar_tags, similar_apis = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict, no_api)
+                with st.spinner('Model Loaded! Getting API Recommendations ...'):
+                    col_api = ['API', 'Similarity Score']
+                    row_api = []
+                    for api, similarity in similar_apis:
+                        row_api.append([api, "{:.2f}".format(similarity)])
+                    p_api = show_table(row_api, col_api)
+                    st.header(f'API Recommendation Table - Sorted by similarity (scrollable)')
+                    st.bokeh_chart(p_api)
+            else:
+                similar_tags = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict)
+
+            show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
 
         ###################################################
         # Output for popularity-based recommendation
@@ -352,7 +384,6 @@ def show_page():
                         if len(rec_table) > no_project:
                             rec_table = rec_table[:no_project]
                         p = show_table(rec_table, colnames)
-                        # st.write(rec_table)
                         st.header('Project Recommendation Table - Sorted by No. of Active Developers in Selected Time Zone (scrollable)')
                         with st.expander("DISCLAIMER"):
                             st.write("The results shown here are based on World of Code (WoC) dataset version U. \
@@ -381,7 +412,6 @@ def show_page():
                         if len(rec_table) == no_project:
                             break
                     p = show_table(rec_table, colnames)
-                    # st.write(rec_table)
                     st.header(f'Project Recommendation Table - Sorted by {pop_metric} (scrollable)')
                     with st.expander("DISCLAIMER"):
                         st.write("The results shown here are based on World of Code (WoC) dataset version U. \
