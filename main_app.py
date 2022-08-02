@@ -10,8 +10,14 @@ from requests.adapters import HTTPAdapter, Retry
 
 @st.cache(persist=True, show_spinner=False, allow_output_mutation=True)
 def load_skill_space_model(filename):
-    with gzip.open(filename, 'rb') as f:
-        mod = pickle.load(f)
+    try:
+        # if file exists
+        with gzip.open(filename, 'rb') as f:
+            mod = pickle.load(f)
+    except:
+        # download file
+        pass
+
     return mod
 
 # Define the Cosine Similarity Function
@@ -36,7 +42,7 @@ def show_table(obj, colnames):
     return(p)
 
 def show_tz():
-    with open('tz_project_gender.json', 'r') as f:
+    with gzip.open('./data/tz_project_gender.json.gz', 'rt') as f:
         data = json.load(f)
         tz_list = [f"UTC-{str(timedelta(hours=-float(x)))[:-3]}" if float(x)<0 else f"UTC+{str(timedelta(hours=float(x)))[:-3]}" \
             for x in sorted(list(map(float, data.keys()))) ]
@@ -135,7 +141,7 @@ def show_mentors(dev_vect, cores, mod):
     st.table(df)
 
 
-def show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct=0):
+def show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, gender_pct=0):
     if type(similar_tags) == ValueError:
         st.write(similar_tags)
     else:
@@ -149,6 +155,8 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                 if i >= no_project: 
                     break
                 if '_' in element and '<' not in element: 
+                    if element in exclude:
+                        continue
                     try:
                         female_pct = proj_info[element]['female_pct']
                     except:
@@ -237,12 +245,15 @@ def show_page():
     langdict = {'C/C++':'C', 'C#':'Cs', 'Go':'Go', 'Perl':'pl', 'Ruby':'rb', 'JavaScript':'JS',\
         'Python':'PY', 'R':'R', 'Rust':'Rust', 'Scala':'Scala', 'TypeScript':'Typescript',  'Java':'java'}
     
-    with open('Proj_info.pickle', 'rb') as fproj:
+    with gzip.open('./data/Proj_info.pickle.gz', 'rb') as fproj:
         proj_info = pickle.load(fproj)
 
     proj_langs = proj_info.pop('langs')
     proj_langs.add('ALL')
     gender_pct = 0
+
+    exclude = ['frioux_dotfiles', 'auto-program_vendor', 'Reese-D_my_emacs', 'bloomberg_chromium.bb', \
+        'Jackeagle_kernel_msm-3.18', 'AdrianDC_aosp_development_sony8960_q', 'docker-library_commit-warehouse'] # Exclude potential bugs in WoC
 
     ###################################################
     # Inputs
@@ -362,10 +373,10 @@ def show_page():
         ###################################################
         if nav_id == 'exp':
             with st.spinner('Loading the Skill Space Model, this might take a few minutes ...'):
-                mod = load_skill_space_model('doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz') 
+                mod = load_skill_space_model('./data/doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz') 
 
             dev_vect, similar_tags = recommend_project(apiselect, langselect, langdict, mod)
-            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
+            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, gender_pct)
             if is_mentor:
                 show_mentors(dev_vect, coredevs, mod)
         ###################################################
@@ -373,8 +384,8 @@ def show_page():
         ###################################################
         elif nav_id == 'trans':
             with st.spinner('Loading the Skill Space Model, this might take a few minutes ...'):
-                mod = load_skill_space_model('doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz')
-
+                mod = load_skill_space_model('./data/doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz')
+            # API & Project recommendations
             if is_api:
                 dev_vect, similar_tags, similar_apis = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict, no_api)
                 with st.spinner('Model Loaded! Getting API Recommendations ...'):
@@ -388,7 +399,7 @@ def show_page():
             else:
                 dev_vect, similar_tags = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict)
 
-            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
+            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, gender_pct)
             if is_mentor:
                 show_mentors(dev_vect, coredevs, mod)
         ###################################################
@@ -413,7 +424,7 @@ def show_page():
                                 prj = '_'.join(project.split('/')[-2:])
                             else:
                                 prj = '_'.join(project.split('/')[-3:])
-                            if prj not in filtered_proj.keys():
+                            if prj not in filtered_proj.keys() or prj in exclude:
                                 continue
                             female_pct = filtered_proj[prj]['female_pct']
                             if is_diversity:
@@ -439,6 +450,8 @@ def show_page():
                     colnames = ['Project URL', 'No. Stars', 'No. Forks', 'Total No. Contributors','Female Developer Percentage' ]
                     rec_table = []
                     for prj in sorted_proj:
+                        if prj in exclude:
+                            continue
                         with st.spinner('Checking if Project URL exists ...'):
                             project = check_project_url(prj)
                             if not project:
@@ -451,7 +464,7 @@ def show_page():
                         else:
                             rec_table.append([project, filtered_proj[prj]['NumStars'], filtered_proj[prj]['NumForks'],
                                 filtered_proj[prj]['NumAuthors'],f'{female_pct:.2f}%' ])
-                        if len(rec_table) == no_project:
+                        if len(rec_table) >= no_project:
                             break
                     p = show_table(rec_table, colnames)
                     st.header(f'Project Recommendation Table - Sorted by {pop_metric} (scrollable)')

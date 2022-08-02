@@ -1,4 +1,4 @@
 venv/
+data/doc2vec*
 .DS_Store
 *.ipynb
-doc2vec*
