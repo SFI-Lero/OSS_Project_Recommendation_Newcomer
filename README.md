@@ -1,4 +1,4 @@
-# OSS_Project_Recommendation_Newcomer
+# OSS Project Recommendation for Newcomers
 Expertise-based Project Recommendation for OSS Newcomers using the [Skill Space](https://doi.org/10.1109/ICSE43902.2021.00094) model.
 
 How to run:
