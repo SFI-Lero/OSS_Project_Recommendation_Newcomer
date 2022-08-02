@@ -1,7 +1,4 @@
 venv/
 .DS_Store
 *.ipynb
-*.gz
-*.pickle
-*.json
-
+doc2vec*

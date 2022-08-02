@@ -1,6 +1,7 @@
+from collections import defaultdict
 import streamlit as st
 import hydralit_components as hc
-import pickle, gzip, json, requests, numpy
+import pickle, gzip, json, requests, numpy, math
 from datetime import timedelta
 import pandas as pd
 from bokeh.models import DataTable, TableColumn, HTMLTemplateFormatter, ColumnDataSource
@@ -12,6 +13,10 @@ def load_skill_space_model(filename):
     with gzip.open(filename, 'rb') as f:
         mod = pickle.load(f)
     return mod
+
+# Define the Cosine Similarity Function
+def cos_sim (av, bv):
+    return (sum(av*bv)/math.sqrt(sum(av*av)*sum(bv*bv)))
 
 def show_table(obj, colnames):
     
@@ -87,7 +92,7 @@ def recommend_project(apis, languages, langdict, mod):
     # get similar tags 
     similar_tags = mod.dv.most_similar(positive=[poslist], topn = 1000)
     
-    return similar_tags
+    return poslist, similar_tags
 
 def transfer_project(source_lang, dest_lang, apis, mod, langdict, no_api=0):
     poslist = mod.dv[langdict[dest_lang]] - mod.dv[langdict[source_lang]]
@@ -104,9 +109,31 @@ def transfer_project(source_lang, dest_lang, apis, mod, langdict, no_api=0):
 
     if no_api > 0:
         similar_apis = mod.wv.most_similar(positive=[poslist], topn = no_api)
-        return similar_tags, similar_apis
+        return poslist, similar_tags, similar_apis
     else:
-        return similar_tags
+        return poslist, similar_tags
+
+def show_mentors(dev_vect, cores, mod):
+    # calculate similarity of dev & cores
+    dev_core_proj_sim = []
+    for core in cores.keys():
+        try:
+            cvec = mod.dv[core]
+            projs = ','.join(cores[core])
+            sim = cos_sim(dev_vect,cvec)
+            dev_core_proj_sim.append([core, projs, sim])
+        except:
+            continue
+    # sort
+    dev_core_proj_sim.sort(key=lambda x: x[2], reverse=True)
+    # top 10
+    top_ment = dev_core_proj_sim[:10]
+    colnames = ['Potential Mentor', 'Core Developer in Project', 'Similarity']
+    
+    st.header(f'Mentor Recommendation Table - Sorted by similarity (scrollable)')
+    df = pd.DataFrame(top_ment, columns=colnames)
+    st.table(df)
+
 
 def show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct=0):
     if type(similar_tags) == ValueError:
@@ -117,6 +144,7 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
             i = 0
             colnames = ['Project URL', 'Similarity', 'No. Stars', 'No. Forks', 'Total No. Contributors','Female Developer Percentage' ]
             rows = []
+            cores = defaultdict(list)
             for element,similarity in similar_tags:
                 if i >= no_project: 
                     break
@@ -132,6 +160,8 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                             if url:
                                 rows.append([url, "{:.2f}".format(similarity),  proj_info[element]['NumStars'], proj_info[element]['NumForks'],
                                 proj_info[element]['NumAuthors'],f'{female_pct:.2f}%' ])
+                                for k in proj_info[element]['Core'].keys():
+                                    cores[k].append(url)
                                 i += 1
                     else:
                         # check if exist
@@ -139,6 +169,8 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                         if url:
                             rows.append([url, "{:.2f}".format(similarity),  proj_info[element]['NumStars'], proj_info[element]['NumForks'],
                             proj_info[element]['NumAuthors'],f'{female_pct:.2f}%' ])
+                            for k in proj_info[element]['Core'].keys():
+                                cores[k].append(url)
                             i += 1
             p = show_table(rows, colnames)
             st.header(f'Project Recommendation Table - Sorted by similarity (scrollable)')
@@ -146,6 +178,8 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                 st.write("The results shown here are based on World of Code (WoC) dataset version U. \
                 Any inconsistencies should be reported to WoC maintainers.")
             st.bokeh_chart(p)
+
+            return cores
                     
 
 def show_page():
@@ -295,8 +329,14 @@ def show_page():
     if nav_id == 'pop':
         if pop_metric == 'Location (TimeZone)':
             is_location = True
-
-    is_diversity = st.checkbox("Check if you want to filter results by diversity")
+        is_diversity = st.checkbox("Check if you want to filter results by diversity")
+    else:
+        col_d, col_m = st.columns(2)
+        with col_d:
+            is_diversity = st.checkbox("Check if you want to filter results by diversity")
+        with col_m:
+            is_mentor =  st.checkbox("Check if you want recommendation for potential Mentors", 
+            help="Potential Mentors are chosen from core developers in the recommended projects, limited to max. 10")
 
 
     if is_diversity and is_location:
@@ -324,9 +364,10 @@ def show_page():
             with st.spinner('Loading the Skill Space Model, this might take a few minutes ...'):
                 mod = load_skill_space_model('doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz') 
 
-            similar_tags = recommend_project(apiselect, langselect, langdict, mod)
-            show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
-            
+            dev_vect, similar_tags = recommend_project(apiselect, langselect, langdict, mod)
+            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
+            if is_mentor:
+                show_mentors(dev_vect, coredevs, mod)
         ###################################################
         # Output for skill transfer based recommendation
         ###################################################
@@ -335,7 +376,7 @@ def show_page():
                 mod = load_skill_space_model('doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz')
 
             if is_api:
-                similar_tags, similar_apis = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict, no_api)
+                dev_vect, similar_tags, similar_apis = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict, no_api)
                 with st.spinner('Model Loaded! Getting API Recommendations ...'):
                     col_api = ['API', 'Similarity Score']
                     row_api = []
@@ -345,10 +386,11 @@ def show_page():
                     st.header(f'API Recommendation Table - Sorted by similarity (scrollable)')
                     st.bokeh_chart(p_api)
             else:
-                similar_tags = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict)
+                dev_vect, similar_tags = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict)
 
-            show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
-
+            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, gender_pct)
+            if is_mentor:
+                show_mentors(dev_vect, coredevs, mod)
         ###################################################
         # Output for popularity-based recommendation
         ###################################################
