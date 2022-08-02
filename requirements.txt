@@ -1,4 +1,5 @@
 bokeh==2.4.3
+gensim==4.2.0
 hydralit_components==1.0.10
 numpy==1.23.1
 pandas==1.4.3

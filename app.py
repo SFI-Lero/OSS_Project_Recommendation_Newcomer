@@ -7,6 +7,8 @@ import pandas as pd
 from bokeh.models import DataTable, TableColumn, HTMLTemplateFormatter, ColumnDataSource
 from requests.adapters import HTTPAdapter, Retry
 from stqdm import stqdm
+from gensim.models.doc2vec import Doc2Vec
+
 
 def download_file():
     with st.spinner('Skill Space Model not found! Downloading (This is only run once) ...'):
@@ -194,9 +196,17 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                             i += 1
             p = show_table(rows, colnames)
             st.header(f'Project Recommendation Table - Sorted by similarity (scrollable)')
-            with st.expander("DISCLAIMER"):
-                st.write("The results shown here are based on World of Code (WoC) dataset version U. \
-                Any inconsistencies should be reported to WoC maintainers.")
+            with st.expander("INFORMATION & DISCLAIMER"):
+                st.info("""The results shown here are based on World of Code (WoC) dataset version U, collected on Nov. 2021.
+                WoC uses a community-resolution based approach to calculate various statistics, so the values may differ from what you see 
+                on GitHub. Since we did not use any fork-resolution, the projects might be a fork of another project, in which case, 
+                the user is recommeded to look into the source project. Any obvious inconsistencies should be reported to WoC maintainers.""")
+                st.info('The Tables are Interactive and can be SORTED by any of the columns - just click on the column header!')
+                st.warning(
+                    """We fully support people who do not identify with either of the two binary genders, 
+                    the reason for showing only two genders here is because WoC only identifies people as male or female 
+                    (or 'Unknown' for developers who do not provide a common name)."""
+                )
             st.bokeh_chart(p)
 
             return cores
@@ -249,7 +259,7 @@ def show_page():
     {'label':'Popularity based Recommendation', 'id':'pop', 'icon':"fas fa-users"}
     ]
 
-    nav_id = hc.nav_bar(menu_definition=nav_items, hide_streamlit_markers=False)
+    nav_id = hc.nav_bar(menu_definition=nav_items, hide_streamlit_markers=True)
 
     ###################################################
     # Define supporting variables
@@ -450,9 +460,17 @@ def show_page():
                             rec_table = rec_table[:no_project]
                         p = show_table(rec_table, colnames)
                         st.header('Project Recommendation Table - Sorted by No. of Active Developers in Selected Time Zone (scrollable)')
-                        with st.expander("DISCLAIMER"):
-                            st.write("The results shown here are based on World of Code (WoC) dataset version U. \
-                            Any inconsistencies should be reported to WoC maintainers.")
+                        with st.expander("INFORMATION & DISCLAIMER"):
+                            st.info("""The results shown here are based on World of Code (WoC) dataset version U, collected on Nov. 2021.
+                        WoC uses a community-resolution based approach to calculate various statistics, so the values may differ from what you see 
+                        on GitHub. Since we did not use any fork-resolution, the projects might be a fork of another project, in which case, 
+                        the user is recommeded to look into the source project. Any obvious inconsistencies should be reported to WoC maintainers.""")
+                            st.info('The Tables are Interactive and can be SORTED by any of the columns - just click on the column header!')
+                            st.warning(
+                            """We fully support people who do not identify with either of the two binary genders, 
+                            the reason for showing only two genders here is because WoC only identifies people as male or female 
+                            (or 'Unknown' for developers who do not provide a common name)."""
+                        )
                         st.bokeh_chart(p)
                 else:
                     # sort by metric
@@ -480,9 +498,17 @@ def show_page():
                             break
                     p = show_table(rec_table, colnames)
                     st.header(f'Project Recommendation Table - Sorted by {pop_metric} (scrollable)')
-                    with st.expander("DISCLAIMER"):
-                        st.write("The results shown here are based on World of Code (WoC) dataset version U. \
-                        Any inconsistencies should be reported to WoC maintainers.")
+                    with st.expander("INFORMATION & DISCLAIMER"):
+                        st.info("""The results shown here are based on World of Code (WoC) dataset version U, collected on Nov. 2021.
+                        WoC uses a community-resolution based approach to calculate various statistics, so the values may differ from what you see 
+                        on GitHub. Since we did not use any fork-resolution, the projects might be a fork of another project, in which case, 
+                        the user is recommeded to look into the source project. Any obvious inconsistencies should be reported to WoC maintainers.""")
+                        st.info('The Tables are Interactive and can be SORTED by any of the columns - just click on the column header!')
+                        st.warning(
+                            """We fully support people who do not identify with either of the two binary genders, 
+                            the reason for showing only two genders here is because WoC only identifies people as male or female 
+                            (or 'Unknown' for developers who do not provide a common name)."""
+                        )
                     st.bokeh_chart(p)
 
 ########################
