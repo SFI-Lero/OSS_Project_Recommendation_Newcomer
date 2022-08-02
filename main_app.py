@@ -1,23 +1,36 @@
 from collections import defaultdict
 import streamlit as st
 import hydralit_components as hc
-import pickle, gzip, json, requests, numpy, math
+import pickle, gzip, json, requests, numpy, math, os
 from datetime import timedelta
 import pandas as pd
 from bokeh.models import DataTable, TableColumn, HTMLTemplateFormatter, ColumnDataSource
 from requests.adapters import HTTPAdapter, Retry
+from stqdm import stqdm
 
+def download_file():
+    with st.spinner('Skill Space Model not found! Downloading (This is only run once) ...'):
+        with requests.get('https://www.dropbox.com/s/9pfnhr71nlbpi3s/doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz?dl=1', stream=True) as r:
+            total = int(r.headers.get('content-length', 0))
+            with open('tempfile', 'wb') as f, stqdm(total=total,unit='iB',unit_scale=True,unit_divisor=1024) as bar:
+                r.raise_for_status()
+                for chunk in r.iter_content(chunk_size=8192):
+                    size = f.write(chunk)
+                    bar.update(size)
 
-@st.cache(persist=True, show_spinner=False, allow_output_mutation=True)
+        return 'tempfile'
+
+@st.cache(persist=True, show_spinner=False, allow_output_mutation=True, suppress_st_warning=True)
 def load_skill_space_model(filename):
     try:
         # if file exists
         with gzip.open(filename, 'rb') as f:
             mod = pickle.load(f)
     except:
-        # download file
-        pass
-
+        name = download_file()
+        with gzip.open(name, 'rb') as f:
+            mod = pickle.load(f)  
+        os.remove(name)
     return mod
 
 # Define the Cosine Similarity Function
@@ -59,7 +72,6 @@ def show_tz():
 
     return (data,tzoffset)
 
-@st.cache(persist=True, show_spinner=False)
 def check_project_url(project):
     project = project.replace('__','_')
     if 'gitlab.com' not in project and 'bitbucket.org' not in project and 'gitbox.com' not in project:
