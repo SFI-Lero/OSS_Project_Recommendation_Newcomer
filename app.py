@@ -137,6 +137,8 @@ def show_mentors(dev_vect, cores, mod):
     # calculate similarity of dev & cores
     dev_core_proj_sim = []
     for core in cores.keys():
+        if 'noreply' in core or '.' not in core:
+            continue
         try:
             cvec = mod.dv[core]
             projs = ','.join(cores[core])
@@ -155,7 +157,7 @@ def show_mentors(dev_vect, cores, mod):
     st.table(df)
 
 
-def show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, gender_pct=0):
+def show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, lang, gender_pct=0):
     if type(similar_tags) == ValueError:
         st.write(similar_tags)
     else:
@@ -165,6 +167,7 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
             colnames = ['Project URL', 'Similarity', 'No. Stars', 'No. Forks', 'Total No. Contributors','Female Developer Percentage' ]
             rows = []
             cores = defaultdict(list)
+            # filtered_proj = {k:v for k,v in proj_info.items() if langselect in v['FileInfo'].keys()}
             for element,similarity in similar_tags:
                 if i >= no_project: 
                     break
@@ -173,6 +176,12 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                         continue
                     try:
                         female_pct = proj_info[element]['female_pct']
+                        if type(lang) == str:
+                            if lang not in proj_info[element]['FileInfo'].keys():
+                                continue
+                        elif type(lang) == list:
+                            if not any(lx in proj_info[element]['FileInfo'].keys() for lx in lang):
+                                continue
                     except:
                         continue
                     if is_diversity:
@@ -274,7 +283,7 @@ def show_page():
     proj_langs.add('ALL')
     gender_pct = 0
 
-    exclude = ['frioux_dotfiles', 'auto-program_vendor', 'Reese-D_my_emacs', 'bloomberg_chromium.bb', \
+    exclude = ['frioux_dotfiles', 'auto-program_vendor', 'Reese-D_my_emacs', 'bloomberg_chromium.bb', '996icu_996.ICU', \
         'Jackeagle_kernel_msm-3.18', 'AdrianDC_aosp_development_sony8960_q', 'docker-library_commit-warehouse'] # Exclude potential bugs in WoC
 
     ###################################################
@@ -398,7 +407,7 @@ def show_page():
                 mod = load_skill_space_model('./data/doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz') 
 
             dev_vect, similar_tags = recommend_project(apiselect, langselect, langdict, mod)
-            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, gender_pct)
+            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, langselect, gender_pct)
             if is_mentor:
                 show_mentors(dev_vect, coredevs, mod)
         ###################################################
@@ -421,7 +430,7 @@ def show_page():
             else:
                 dev_vect, similar_tags = transfer_project(source_lang, dest_lang, api1_trans, mod, langdict)
 
-            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, gender_pct)
+            coredevs = show_project_recommendation_table(similar_tags, no_project, proj_info, is_diversity, exclude, dest_lang, gender_pct)
             if is_mentor:
                 show_mentors(dev_vect, coredevs, mod)
         ###################################################
