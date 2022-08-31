@@ -108,10 +108,8 @@ def recommend_project(apis, languages, langdict, mod):
             poslist += mod.wv.get_vector(api)
         except:
             return (ValueError('API '+api+' Not Found in our data'))
-    
     # get similar tags 
-    similar_tags = mod.dv.most_similar(positive=[poslist], topn = 1000)
-    
+    similar_tags = mod.dv.most_similar(positive=[poslist], topn = 1275597)
     return poslist, similar_tags
 
 def transfer_project(source_lang, dest_lang, apis, mod, langdict, no_api=0):
@@ -125,7 +123,7 @@ def transfer_project(source_lang, dest_lang, apis, mod, langdict, no_api=0):
             return (ValueError('API '+api+' Not Found in our data'))
     
     # get similar tags 
-    similar_tags = mod.dv.most_similar(positive=[poslist], topn = 1000)
+    similar_tags = mod.dv.most_similar(positive=[poslist], topn = 1275597)
 
     if no_api > 0:
         similar_apis = mod.wv.most_similar(positive=[poslist], topn = no_api)
@@ -177,13 +175,15 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                     try:
                         female_pct = proj_info[element]['female_pct']
                         if type(lang) == str:
-                            if lang not in proj_info[element]['FileInfo'].keys():
+                            if lang != 'C#' and lang not in proj_info[element]['FileInfo'].keys():
                                 continue
                         elif type(lang) == list:
-                            if not any(lx in proj_info[element]['FileInfo'].keys() for lx in lang):
-                                continue
+                            if 'C#' not in lang:
+                                if not any(lx in proj_info[element]['FileInfo'].keys() for lx in lang):
+                                    continue
                     except:
                         continue
+                    print('here2')
                     if is_diversity:
                         if female_pct >= gender_pct:
                             # check if exist
@@ -265,7 +265,8 @@ def show_page():
     nav_items = [
     {'label':'Expertise based Recommendation', 'id':'exp', 'icon':"fas fa-user-cog"}, 
     {'label':'Skill-Transfer based Recommendation', 'id':'trans', 'icon':"fas fa-exchange-alt"},
-    {'label':'Popularity based Recommendation', 'id':'pop', 'icon':"fas fa-users"}
+    {'label':'Popularity based Recommendation', 'id':'pop', 'icon':"fas fa-users"},
+    {'label':'Project Similarity Calculator', 'id':'sim', 'icon':"fas fa-ruler-horizontal"}
     ]
 
     nav_id = hc.nav_bar(menu_definition=nav_items, hide_streamlit_markers=True)
@@ -274,7 +275,7 @@ def show_page():
     # Define supporting variables
     ###################################################
     langdict = {'C/C++':'C', 'C#':'Cs', 'Go':'Go', 'Perl':'pl', 'Ruby':'rb', 'JavaScript':'JS',\
-        'Python':'PY', 'R':'R', 'Rust':'Rust', 'Scala':'Scala', 'TypeScript':'Typescript',  'Java':'java'}
+        'Python':'PY', 'R':'R', 'Rust':'Rust', 'Scala':'Scala', 'TypeScript':'TypeScript',  'Java':'java'}
     
     with gzip.open('./data/Proj_info.pickle.gz', 'rb') as fproj:
         proj_info = pickle.load(fproj)
@@ -294,7 +295,7 @@ def show_page():
     if nav_id == 'exp':
         st.header("Recommending* Projects based on Developer's Expertise")
         st.markdown("_*We use the [Skill Space](https://doi.org/10.1109/ICSE43902.2021.00094) model to recommend similar projects\
-              based on a developer's knowledge of Languages and APIs._")
+              based on your knowledge of Languages and APIs._")
         
         # basic & advanced options - basic = 1 language, advanced = multiple language
         dispopt = st.radio('Expertise Input Options', options=['Show me the Standard Options', 'Show me Advanced Options'], horizontal=True, 
@@ -364,40 +365,58 @@ def show_page():
         with col3:    
             no_project = st.slider('Select How Many Projects you wish to see:', min_value=1, max_value=20, value=10)
 
+    elif nav_id == 'sim':
+        st.header('Project Similarity Calculator')
+        st.markdown('''If you have project in mind and would like to test how well you expertise matches with the project, 
+        this is the place for you! _We use the [Skill Space](https://doi.org/10.1109/ICSE43902.2021.00094) model give you a similarity
+        measure based on your knowledge of Languages and APIs._''')
+
+        col1s, col2s, col3s = st.columns(3)
+        with col1s:
+            purl = st.text_input('Please enter the OSS project URL and press Enter/Return:')
+        with col2s:
+            langselect = st.multiselect('Select ALL the Languages you are familiar with:', langdict.keys())
+        with col3s:
+            apiselect = st.text_input('Enter ALL the Libraries/Packages/APIs you are familiar with in the chosen \
+                language(s) (separated by semicolon ";"):')
+
+        go = st.button('Get Project Similarity Score')
+
     ###################################################
     # Adding Diversity (Gender) Filters - company email, ethnicity, elephant facor, non-binary pronoun
     ###################################################
-    is_location = False
-    if nav_id == 'pop':
-        if pop_metric == 'Location (TimeZone)':
-            is_location = True
-        is_diversity = st.checkbox("Check if you want to filter results by diversity")
-    else:
-        col_d, col_m = st.columns(2)
-        with col_d:
+    if nav_id != 'sim':
+        is_location = False
+        if nav_id == 'pop':
+            if pop_metric == 'Location (TimeZone)':
+                is_location = True
             is_diversity = st.checkbox("Check if you want to filter results by diversity")
-        with col_m:
-            is_mentor =  st.checkbox("Check if you want recommendation for potential Mentors", 
-            help="Potential Mentors are chosen from core developers in the recommended projects, limited to max. 10")
+        else:
+            col_d, col_m = st.columns(2)
+            with col_d:
+                is_diversity = st.checkbox("Check if you want to filter results by diversity")
+            with col_m:
+                is_mentor =  st.checkbox("Check if you want recommendation for potential Mentors", 
+                help="Potential Mentors are chosen from core developers in the recommended projects, limited to max. 10")
 
 
-    if is_diversity and is_location:
-        col_f3, col_f4 = st.columns(2)
-        with col_f3:
+        if is_diversity and is_location:
+            col_f3, col_f4 = st.columns(2)
+            with col_f3:
+                gender_pct = st.slider('Minimum percentage of female developers in the project', min_value=0, max_value=100, value=5,
+                help='Only developer names that could be identified as male/female are used for this calculation')
+            with col_f4:
+                data, tzoffset = show_tz()
+        elif is_diversity:
             gender_pct = st.slider('Minimum percentage of female developers in the project', min_value=0, max_value=100, value=5,
-            help='Only developer names that could be identified as male/female are used for this calculation')
-        with col_f4:
+                help='Only developer names that could be identified as male/female are used for this calculation')
+        elif is_location:
             data, tzoffset = show_tz()
-    elif is_diversity:
-        gender_pct = st.slider('Minimum percentage of female developers in the project', min_value=0, max_value=100, value=5,
-            help='Only developer names that could be identified as male/female are used for this calculation')
-    elif is_location:
-        data, tzoffset = show_tz()
     
 ###################################################
 # Outputs
 ###################################################
-    go = st.button('Get Project Recommendation')
+        go = st.button('Get Project Recommendation')
     if go:
         ###################################################
         # Output for skill-space based recommendation
@@ -519,6 +538,35 @@ def show_page():
                             (or 'Unknown' for developers who do not provide a common name)."""
                         )
                     st.bokeh_chart(p)
+
+        ###################################################
+        # Output for project similarity 
+        ###################################################
+        elif nav_id == 'sim':
+            with st.spinner('Loading the Skill Space Model, this might take a few minutes ...'):
+                mod = load_skill_space_model('./data/doc2vec.U.PtAlAPI_U.ep1.trained.pickle.gz')
+            if 'github.com' in purl:
+                prj = '_'.join(purl.split('/')[-2:])
+            else:
+                prj = '_'.join(purl.split('/')[-3:])
+            if prj not in proj_info.keys() or prj in exclude:
+                st.error('Sorry! This project is not in our database! Apologies for the inconvenience!')
+            else:
+                prjvect = mod.dv[prj]
+                poslist = numpy.zeros((200,))
+                for x in langselect:
+                    poslist += mod.dv[langdict[x]]
+                for api in apiselect.split(';'):
+                    api = api.strip()
+                    try:
+                        poslist += mod.wv.get_vector(api)
+                    except:
+                        st.error('API '+api+' Not Found in our data')
+                        poslist = None
+            if any(poslist):
+                sim = cos_sim(prjvect,poslist)
+                st.write(f"Your Similarity Score with project: {purl} is {sim:.2f}")
+            
 
 ########################
 # Main function call
