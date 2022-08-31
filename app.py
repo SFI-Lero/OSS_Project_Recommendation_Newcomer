@@ -183,7 +183,6 @@ def show_project_recommendation_table(similar_tags, no_project, proj_info, is_di
                                     continue
                     except:
                         continue
-                    print('here2')
                     if is_diversity:
                         if female_pct >= gender_pct:
                             # check if exist
