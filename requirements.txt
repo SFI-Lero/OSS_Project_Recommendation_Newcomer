@@ -5,4 +5,4 @@ numpy==1.23.1
 pandas==1.4.3
 requests==2.31.0
 stqdm==0.0.4
-streamlit==1.11.1
+streamlit==1.30.0
